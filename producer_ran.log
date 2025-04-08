@@ -1,0 +1,64 @@
+2025-03-25 13:05:54 - 📤 Sent batch 1 with 2 record IDs.
+2025-03-25 13:05:56 - ❌ Task failed: 'NoneType' object has no attribute 'rstrip'
+2025-03-25 13:13:03 - 📤 Sent batch 1 with 4 record IDs.
+2025-03-25 13:13:18 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-03-25 13:20:42 - 📤 Sent batch 1 with 2 record IDs.
+2025-03-25 13:20:58 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-03-25 13:35:53 - 📤 Sent batch 1 with 2 record IDs.
+2025-03-25 13:36:11 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-03-29 12:45:22 - 📤 Sent batch 1 with 2 record IDs.
+2025-03-29 12:45:37 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-03-29 12:56:23 - 📤 Sent batch 1 with 2 record IDs.
+2025-03-29 12:56:37 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-04-07 14:07:25 - 📤 Sent batch 1 with 1 record IDs.
+2025-04-07 14:07:38 - ❌ Task failed: Error: batch op errors occurred, full error: {'writeErrors': [{'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('67f3dc2a07f82cf80d168c2b'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'properties', 'propertiesNotSatisfied': [{'propertyName': 'user_id', 'details': [{'operatorName': 'bsonType', 'specifiedAs': {'bsonType': 'string'}, 'reason': 'type did not match', 'consideredValue': ['userA', 'userB'], 'consideredType': 'array'}]}]}]}}, 'op': {'user_id': ['userA', 'userB'], 'timestamp': datetime.datetime(2025, 1, 1, 10, 1, tzinfo=tzlocal()), 'engagement_level': 'Low', 'dominant_topic': 'Customer Service', 'avg_sentiment': 'Neutral', 'drop_off_sentiment': 'Neutral', 'error_rate': 0, 'dialog_turns': 2, 'duration': 0, 'resolution': 'Dropped', 'location': {'country': 'N/A', 'state': 'N/A', 'city': 'N/A'}, '_id': ObjectId('67f3dc2a07f82cf80d168c2b')}}], 'writeConcernErrors': [], 'nInserted': 0, 'nUpserted': 0, 'nMatched': 0, 'nModified': 0, 'nRemoved': 0, 'upserted': []}
+2025-04-08 02:38:19 - 📤 Sent batch 1 with 49 record IDs.
+2025-04-08 02:38:19 - 📤 Sent batch 2 with 39 record IDs.
+2025-04-08 02:38:20 - 📤 Sent batch 3 with 36 record IDs.
+2025-04-08 02:38:20 - 📤 Sent batch 4 with 42 record IDs.
+2025-04-08 02:38:21 - 📤 Sent batch 5 with 34 record IDs.
+2025-04-08 02:39:10 - ❌ Task failed: Error: malformed node or string: <_ast.Name object at 0x7fb5e5cfc6a0>
+2025-04-08 02:39:11 - ❌ Task failed: Error: malformed node or string: <_ast.Name object at 0x7fb5e5cf4970>
+2025-04-08 02:39:12 - ❌ Task failed: Error: malformed node or string: <_ast.Name object at 0x7fb5e5cf73d0>
+2025-04-08 02:39:13 - ❌ Task failed: Error: malformed node or string: <_ast.Name object at 0x7fb5e5cf7c10>
+2025-04-08 02:39:39 - ❌ Task failed: Error: malformed node or string: <_ast.Name object at 0x7fb5e5c6a400>
+2025-04-08 02:44:02 - 📤 Sent batch 1 with 49 record IDs.
+2025-04-08 02:44:03 - 📤 Sent batch 2 with 39 record IDs.
+2025-04-08 02:44:03 - 📤 Sent batch 3 with 36 record IDs.
+2025-04-08 02:44:04 - 📤 Sent batch 4 with 42 record IDs.
+2025-04-08 02:44:04 - 📤 Sent batch 5 with 34 record IDs.
+2025-04-08 02:44:30 - ❌ Task failed: Error: local variable 'json' referenced before assignment
+2025-04-08 02:44:31 - ❌ Task failed: Error: local variable 'json' referenced before assignment
+2025-04-08 02:44:32 - ❌ Task failed: Error: local variable 'json' referenced before assignment
+2025-04-08 02:44:33 - ❌ Task failed: Error: local variable 'json' referenced before assignment
+2025-04-08 02:44:42 - ❌ Task failed: Error: local variable 'json' referenced before assignment
+2025-04-08 02:45:59 - 📤 Sent batch 1 with 49 record IDs.
+2025-04-08 02:46:00 - 📤 Sent batch 2 with 39 record IDs.
+2025-04-08 02:46:00 - 📤 Sent batch 3 with 36 record IDs.
+2025-04-08 02:46:01 - 📤 Sent batch 4 with 42 record IDs.
+2025-04-08 02:46:01 - 📤 Sent batch 5 with 34 record IDs.
+2025-04-08 02:49:14 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-08 02:49:34 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-04-08 08:59:01 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-08 08:59:15 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}

@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: myuser
+      RABBITMQ_DEFAULT_PASS: mypassword
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  preprocessor:
+    build: ./preprocessor
+    environment:
+      - AZURE_STORAGE_CONNECTION_STRING
+      - AZURE_FILE_SHARE_NAME
+      - AZURE_FILE_DIRECTORY
+      - AZURE_OUTPUT_FILE
+      - MONGODB_URL
+    depends_on:
+      - rabbitmq
+      - redis
+
+  processor:
+    build: ./processor
+    container_name: processor_container
+    command: python main.py
+    volumes:
+      - .:/processor
+    working_dir: /processor
+    depends_on:
+      - rabbitmq
+      - redis
+
+volumes:
+  rabbitmq_data:
+  redis_data:
