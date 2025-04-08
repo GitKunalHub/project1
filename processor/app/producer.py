@@ -171,12 +171,22 @@ def wait_for_interactions_ready():
     except Exception as e:
         print("Oh no, error:", e)
 
+            
+    # finally:
+        # connection.close()
+### Token-based Batching Functions ###
+
 def count_tokens(text, encoding="", default_encoder="cl100k_base"):
     if not encoding:
         encoding = tiktoken.get_encoding(default_encoder)
     return len(encoding.encode(text))
 
 def find_max_records_within_limit_custom(data, encoding, max_tokens, reserved_model_response_tokens):
+    """
+    Iterates over records and selects a sequence of record IDs
+    that keep the running token count within the max_tokens limit.
+    Uses the record's 'data' field for token counting.
+    """
     static_tokens = reserved_model_response_tokens  # reserved tokens for output
     running_token_count = static_tokens
     valid_ids = []
@@ -193,6 +203,9 @@ def find_max_records_within_limit_custom(data, encoding, max_tokens, reserved_mo
     return valid_ids
 
 def process_records_in_batches_by_session(records, max_tokens=4096, reserved_model_response_tokens=200, encoding_name="cl100k_base"):
+    """
+    Process records into batches while keeping interactions of the same session_id together.
+    """
     encoding = tiktoken.get_encoding(encoding_name)
     batches = []
     current_batch = []
@@ -242,6 +255,11 @@ def process_records_in_batches_by_session(records, max_tokens=4096, reserved_mod
 
 
 def process_records_in_batches_custom(records, max_tokens=4096, reserved_model_response_tokens=200, encoding_name="cl100k_base"):
+    """
+    Processes a list of records into batches where each batch's token count (based on 'data')
+    does not exceed the max_tokens limit.
+    Returns a list of batches, each being a list of record IDs.
+    """
     encoding = tiktoken.get_encoding(encoding_name)
     batches = []
     start_index = 0
@@ -280,6 +298,10 @@ if __name__ == "__main__":
         log_message(f"❌ Failed to read input file from Azure: {e}")
         print(f"Failed to read input file from Azure: {e}")
         raise
+
+    # Use the token-based batching logic.
+    # Here, we're processing the full list of records (each record is a dict with "id" and "data")
+    # and returning batches (lists of IDs) that satisfy the token count limit.
     batches = process_records_in_batches_by_session(
         records=data,
         max_tokens=4096,                  # set your desired max tokens
@@ -305,8 +327,10 @@ if __name__ == "__main__":
         except Exception as e:
             log_message(f"❌ Task failed: {e}")
             print(f"Task failed: {e}")
+    
     print("Waiting for main queue to drain...")
     wait_for_main_queue_empty()
 
     # Now, DLQ tasks will be automatically picked up by the worker!
     print("DLQ tasks will be processed automatically by the worker.")
+

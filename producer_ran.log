@@ -62,3 +62,5 @@
   "status": "success",
   "message": "Records inserted into MongoDB."
 }
+2025-04-08 10:19:34 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-08 10:19:41 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
