@@ -32,7 +32,6 @@ services:
   processor:
     build: ./processor
     container_name: processor_container
-    command: python main.py
     volumes:
       - .:/processor
     working_dir: /processor
