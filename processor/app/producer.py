@@ -153,7 +153,7 @@ def wait_for_interactions_ready():
     
     try:
         # Use basic_get instead of basic_consume to avoid blocking indefinitely
-        method_frame, properties, body = channel.basic_get(queue='interactions_ready', auto_ack=False)
+        method_frame, properties, body = channel.basic_get(queue='processor_queue', auto_ack=False)
         
         if method_frame:
             print("✅ Received 'interactions_ready' message.")
@@ -165,7 +165,7 @@ def wait_for_interactions_ready():
                 print("✅ Received 'interactions_ready' message via callback.")
                 ch.stop_consuming()
             
-            channel.basic_consume(queue='interactions_ready', on_message_callback=callback)
+            channel.basic_consume(queue='processor_queue', on_message_callback=callback)
             connection.call_later(60, lambda: channel.stop_consuming())  # 2-minute timeout
             channel.start_consuming()
     except Exception as e:

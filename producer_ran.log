@@ -64,3 +64,11 @@
 }
 2025-04-08 10:19:34 - 📤 Sent batch 1 with 2 record IDs.
 2025-04-08 10:19:41 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-04-08 11:06:09 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-08 11:06:17 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-04-08 13:23:20 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-08 13:23:27 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-04-09 05:32:28 - 📤 Sent batch 1 with 8 record IDs.
+2025-04-09 05:32:36 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-04-09 06:03:36 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-09 06:03:43 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}

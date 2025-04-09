@@ -1,116 +1,70 @@
 import pika
+import time
 import redis
-import logging
+import socket
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("Orchestrator")
+def check_processor_availability():
+    r = redis.Redis(host='redis', port=6379)
+    return r.get('processor_available') == b'1'
 
-class Orchestrator:
-    def __init__(self):
-        self.redis_host = 'redis'
-        self.redis_port = 6379
-        self.rabbitmq_host = 'rabbitmq'
-        self.rabbitmq_user = 'myuser'
-        self.rabbitmq_pass = 'mypassword'
-        self.redis_client = None
-        self.rabbitmq_connection = None
-        self.rabbitmq_channel = None
-        self.fifo_queue = 'fifo_queue'
-        self.processor_queue = 'processor_queue'
-        self.processor_available_queue = 'processor_available_queue'
-        self.redis_list_key = 'fifo_agents'
-
-    def connect_redis(self):
-        self.redis_client = redis.Redis(host=self.redis_host, port=self.redis_port, db=0)
+def wait_for_rabbitmq(host, port, timeout=30):
+    """Wait until RabbitMQ is available."""
+    start_time = time.time()
+    while True:
         try:
-            self.redis_client.ping()
-            logger.info("Connected to Redis")
-        except redis.ConnectionError:
-            logger.error("Failed to connect to Redis")
-            raise
-        
-    def connect_rabbitmq(self):
-        credentials = pika.PlainCredentials(self.rabbitmq_user, self.rabbitmq_pass)
-        parameters = pika.ConnectionParameters(
-            host=self.rabbitmq_host,
-            credentials=credentials,
-            heartbeat=600,
-            blocked_connection_timeout=300
-        )
-        self.rabbitmq_connection = pika.BlockingConnection(parameters)
-        self.rabbitmq_channel = self.rabbitmq_connection.channel()
-        self.rabbitmq_channel.queue_declare(queue=self.fifo_queue, durable=True)
-        self.rabbitmq_channel.queue_declare(queue=self.processor_queue, durable=True)
-        self.rabbitmq_channel.queue_declare(queue=self.processor_available_queue, durable=True)
-        logger.info("Connected to RabbitMQ")
-
-    def on_fifo_message(self, ch, method, properties, body):
-        try:
-            agent_id = body.decode()
-            logger.info(f"Received agent {agent_id} from fifo_queue")
-            self.redis_client.rpush(self.redis_list_key, agent_id)
-            logger.info(f"Added agent {agent_id} to Redis list")
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            self.process_next_agent()
+            with socket.create_connection((host, port), timeout=2):
+                print("RabbitMQ is up!")
+                return
         except Exception as e:
-            logger.error(f"Error processing fifo message: {e}")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            if time.time() - start_time > timeout:
+                print("Timeout waiting for RabbitMQ!")
+                raise
+            print("Waiting for RabbitMQ...")
+            time.sleep(2)
 
-    def on_processor_available(self, ch, method, properties, body):
-        logger.info("Received processor available signal")
-        self.process_next_agent()
-
-    def process_next_agent(self):
+def wait_for_redis():
+    """Wait for Redis to become available."""
+    print("🌟 Waiting for Redis to be ready...")
+    r = redis.Redis(host='redis', port=6379)
+    start = time.time()
+    timeout = 30
+    while True:
         try:
-            if self.is_processor_available():
-                agent_id = self.redis_client.lpop(self.redis_list_key)
-                if agent_id:
-                    agent_id = agent_id.decode()
-                    logger.info(f"Sending agent {agent_id} to processor_queue")
-                    self.rabbitmq_channel.basic_publish(
-                        exchange='',
-                        routing_key=self.processor_queue,
-                        body=agent_id,
-                        properties=pika.BasicProperties(delivery_mode=2))
+            if r.ping():
+                print("Redis is up!")
+                return
         except Exception as e:
-            logger.error(f"Error processing next agent: {e}")
+            if time.time() - start > timeout:
+                raise RuntimeError("Timeout waiting for Redis") from e
+            print("Waiting for Redis...")
+            time.sleep(2)
 
-    def is_processor_available(self):
-        try:
-            queue = self.rabbitmq_channel.queue_declare(queue=self.processor_queue, passive=True)
-            return queue.method.message_count == 0
-        except pika.exceptions.ChannelClosedByBroker as e:
-            if e.reply_code == 404:
-                return True
-            raise
-        except Exception as e:
-            logger.error(f"Error checking processor_queue: {e}")
-            return False
+def orchestrator():
+    credentials = pika.PlainCredentials('myuser', 'mypassword')
+    parameters = pika.ConnectionParameters(host='rabbitmq', port=5672, credentials=credentials)
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
 
-    def start_consuming(self):
-        self.rabbitmq_channel.basic_consume(
-            queue=self.fifo_queue,
-            on_message_callback=self.on_fifo_message,
-            auto_ack=False
-        )
-        self.rabbitmq_channel.basic_consume(
-            queue=self.processor_available_queue,
-            on_message_callback=self.on_processor_available,
-            auto_ack=True
-        )
-        logger.info("Orchestrator started. Waiting for messages...")
-        self.rabbitmq_channel.start_consuming()
+    # Declare the FIFO queue
+    channel.queue_declare(queue='processor_queue', durable=True)
 
-    def run(self):
-        self.connect_redis()
-        self.connect_rabbitmq()
-        self.start_consuming()
+    while True:
+        print("Hello from orchestrator!")
+        method_frame, header_frame, body = channel.basic_get(queue='message_queue', auto_ack=False)
+        if method_frame:
+            message = body.decode('utf-8')
+            if check_processor_availability():
+                # Send message to the processor queue
+                channel.basic_publish(exchange='', routing_key='processor_queue', body=message)
+                channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+                print(f"Message '{message}' sent to processor.")
+            else:
+                print("Processor not available, message requeued.")
+                channel.basic_nack(delivery_tag=method_frame.delivery_tag, requeue=True)
+        time.sleep(5)
 
 if __name__ == "__main__":
-    orchestrator = Orchestrator()
-    try:
-        orchestrator.run()
-    except KeyboardInterrupt:
-        logger.info("Orchestrator stopped gracefully")
-    except Exception as e:
-        logger.error(f"Orchestrator failed: {e}")
+    print("🌟 Waiting for RabbitMQ to be ready...")
+    wait_for_rabbitmq('rabbitmq', 5672)
+    wait_for_redis()
+    orchestrator()

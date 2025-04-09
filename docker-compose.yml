@@ -45,7 +45,6 @@ services:
     depends_on:
       - rabbitmq
       - redis
-
 volumes:
   rabbitmq_data:
   redis_data:

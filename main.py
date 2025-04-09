@@ -10,6 +10,10 @@ from processor.app.producer import (
     wait_for_main_queue_empty
 )
 
+def set_processor_availability(available):
+    r = redis.Redis(host='redis', port=6379)
+    r.set('processor_available', '1' if available else '0')
+
 def wait_for_redis():
     """Wait for Redis to become available."""
     print("🌟 Waiting for Redis to be ready...")
@@ -43,7 +47,7 @@ def wait_for_interactions_ready(timeout=160):
     start = time.time()
     
     while True:
-        method_frame, header_frame, body = channel.basic_get(queue='message_queue', auto_ack=True)
+        method_frame, header_frame, body = channel.basic_get(queue='processor_queue', auto_ack=True)
         if method_frame:
             message = body.decode('utf-8')
             # Assuming the expected message is "Interactions ready" or simply "ready"
@@ -68,6 +72,8 @@ def main():
 
         # Wait for the interactions-ready signal before proceeding
         wait_for_interactions_ready()
+
+        set_processor_availability(True)
 
         # Setup
         print("🔧 Declaring queues and exchanges...")
@@ -96,8 +102,11 @@ def main():
         print("🎉 Waiting for workers to finish...")
         main_worker.wait()
         dlq_worker.wait()
+
+        set_processor_availability(False)
     except Exception as e:
         print(f"Oops, something went wrong: {e}")
+        set_processor_availability(False)
         sys.exit(1)
 
 if __name__ == "__main__":
