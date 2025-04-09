@@ -46,7 +46,7 @@ def orchestrator():
     channel = connection.channel()
 
     # Declare the FIFO queue
-    channel.queue_declare(queue='processor_queue', durable=True)
+    # channel.queue_declare(queue='processor_queue', durable=True)
 
     while True:
         print("Hello from orchestrator!")

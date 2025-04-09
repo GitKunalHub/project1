@@ -396,7 +396,7 @@ def listen_for_agent_events():
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
             channel.queue_declare(queue='agent_events', durable=True)
-
+            channel.queue_declare(queue='processor_queue', durable=True)
             def callback(ch, method, properties, body):
                 try:
                     event = json.loads(body)

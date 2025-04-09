@@ -4,7 +4,7 @@ import json
 import pandas as pd
 from celery import Celery
 from kombu import Exchange, Queue
-from processor.app.topic_extraction import Config, fetch_saved_topics, process_batch, read_azure_file, fetch_saved_queries
+from topic_extraction import Config, fetch_saved_topics, process_batch, read_azure_file, fetch_saved_queries
 from dotenv import load_dotenv
 
 # Load environment variables

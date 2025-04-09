@@ -6,8 +6,8 @@ import json
 import pandas as pd
 import tiktoken
 from datetime import datetime
-from processor.app.tasks import process_topic_batch, MAIN_QUEUE, DLQ_QUEUE, MAIN_EXCHANGE, DLX_EXCHANGE
-from processor.app.topic_extraction import Config, read_azure_file, save_analysis_results, consolidate_topics_in_json
+from tasks import process_topic_batch, MAIN_QUEUE, DLQ_QUEUE, MAIN_EXCHANGE, DLX_EXCHANGE
+from topic_extraction import Config, read_azure_file, save_analysis_results, consolidate_topics_in_json
 import openai
 
 LOG_FILE = "producer_ran.log"

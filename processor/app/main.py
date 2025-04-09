@@ -4,7 +4,7 @@ import time
 import signal
 import redis
 import pika  # For waiting on the interactions message
-from processor.app.producer import (
+from producer import (
     wait_for_rabbitmq,
     declare_queues,
     wait_for_main_queue_empty
@@ -64,6 +64,8 @@ def wait_for_interactions_ready(timeout=160):
 
 def main():
     try:
+        set_processor_availability(True)
+        print("Set Processor Availability to True")
         processes = []
  
         print("🌟 Waiting for RabbitMQ to be ready...")
@@ -72,29 +74,26 @@ def main():
 
         # Wait for the interactions-ready signal before proceeding
         wait_for_interactions_ready()
-
-        set_processor_availability(True)
-
         # Setup
         print("🔧 Declaring queues and exchanges...")
         declare_queues()
 
         print("🚀 Starting main queue worker...")
         main_worker = subprocess.Popen([
-            "celery", "-A", "processor.app.tasks", "worker",
+            "celery", "-A", "tasks", "worker",
             "--loglevel=info", "-Q", "main_queue", "--concurrency=4"
         ])
         processes.append(main_worker)
 
         print("📤 Running producer...")
-        subprocess.run([sys.executable, "-m", "processor.app.producer"], check=True)
+        subprocess.run([sys.executable, "-m", "producer"], check=True)
 
         print("⏳ Waiting for main queue to drain...")
         wait_for_main_queue_empty()
 
         print("✨ Starting DLQ worker...")
         dlq_worker = subprocess.Popen([
-            "celery", "-A", "processor.app.tasks", "worker",
+            "celery", "-A", "tasks", "worker",
             "--loglevel=info", "-Q", "custom_dlq", "--concurrency=1"
         ])
         processes.append(dlq_worker)
@@ -104,9 +103,12 @@ def main():
         dlq_worker.wait()
 
         set_processor_availability(False)
+        print("Set Processor Availability to False")
+        print("All processes completed successfully.")
     except Exception as e:
         print(f"Oops, something went wrong: {e}")
         set_processor_availability(False)
+        print("Set Processor Availability to False")
         sys.exit(1)
 
 if __name__ == "__main__":

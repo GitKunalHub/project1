@@ -1,0 +1,18 @@
+2025-04-09 12:12:50 - 📤 Sent batch 1 with 10 record IDs.
+2025-04-09 12:12:52 - ❌ Task failed: 'NoneType' object has no attribute 'rstrip'
+2025-04-09 12:20:45 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-09 12:20:47 - ❌ Task failed: Invalid JSON Parsing
+2025-04-09 12:23:24 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-09 12:23:30 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-04-09 12:26:29 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-09 12:26:35 - ❌ Task failed: Error: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-jJVLc***********************************************************************************lmwA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-04-09 12:33:29 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-09 12:33:46 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
+2025-04-09 12:38:18 - 📤 Sent batch 1 with 2 record IDs.
+2025-04-09 12:38:33 - ✅ Task result: {
+  "status": "success",
+  "message": "Records inserted into MongoDB."
+}
