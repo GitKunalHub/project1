@@ -6,10 +6,12 @@ import logging
 import sys
 import time
 import socket
+from urllib.parse import quote_plus
 from typing import Any, Dict, List, Union
+from bson import ObjectId  # Added to convert string ids to ObjectId
 
 # Third-party libraries
-from azure.storage.fileshare import ShareServiceClient
+from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
 import pymongo
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -21,7 +23,7 @@ import pika
 load_dotenv()
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler("azure_interactions_processor.log"),
@@ -35,57 +37,74 @@ class Config:
     AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     AZURE_FILE_SHARE_NAME = os.getenv("AZURE_FILE_SHARE_NAME")
     AZURE_FILE_DIRECTORY = os.getenv("AZURE_FILE_DIRECTORY", "")
+    AZURE_BLOB_CONTAINER_NAME = os.getenv("AZURE_BLOB_CONTAINER_NAME")
     # MongoDB
-    MONGODB_URI = os.getenv("MONGODB_URL")
-    MONGODB_DB = "metrices"
-    MONGODB_COLLECTION = "agents"
-    # RabbitMQ
-    RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
-    RABBITMQ_USER = os.getenv("RABBITMQ_USER", "myuser")
-    RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "mypassword")
+    MONGO_USER = quote_plus(os.getenv("MONGODB_USER"))
+    MONGO_PASS = quote_plus(os.getenv("MONGODB_PASS"))
+    MONGO_HOST = os.getenv("MONGODB_HOST")
+    MONGO_PORT = os.getenv("MONGODB_PORT")
+    MONGO_AUTH_SOURCE = quote_plus(os.getenv("MONGODB_AUTH_SOURCE"))
+    # Update MongoDB connection and collection parameters
+    MONGODB_URI = (
+        f"mongodb://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}:{MONGO_PORT}/?authSource={MONGO_AUTH_SOURCE}"
+    )
+    MONGODB_DB = os.getenv("MONGODB_DB")
+    # Update collection name to the new one
+    MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION")
 
+    # RabbitMQ
+    RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
+    RABBITMQ_USER = os.getenv("RABBITMQ_USER")
+    RABBITMQ_PASS = os.getenv("RABBITMQ_PASS")
+    RABBITMQ_PORT = os.getenv("RABBITMQ_PORT")
+
+# Update scheduler jobstore to use new collection name if needed.
 scheduler = BackgroundScheduler(
     jobstores={
         'default': MongoDBJobStore(
-            database='metrices',
+            database=Config.MONGODB_DB,
             collection='scheduler_jobs',
-            client=pymongo.MongoClient(Config.MONGODB_URI))
+            client=pymongo.MongoClient(Config.MONGODB_URI)
+        )
     },
     timezone='UTC'
 )
 
-def get_directory_client():
-    service_client = ShareServiceClient.from_connection_string(Config.AZURE_STORAGE_CONNECTION_STRING)
-    share_client = service_client.get_share_client(Config.AZURE_FILE_SHARE_NAME)
-    return share_client.get_directory_client(Config.AZURE_FILE_DIRECTORY)
+def get_blob_client(blob_name: str):
+    blob_service_client = BlobServiceClient.from_connection_string(Config.AZURE_STORAGE_CONNECTION_STRING)
+    container_client = blob_service_client.get_container_client(Config.AZURE_BLOB_CONTAINER_NAME)
+    return container_client.get_blob_client(blob_name)
 
-def read_azure_file(file_name: str) -> str:
-    directory_client = get_directory_client()
-    file_client = directory_client.get_file_client(file_name)
-    return file_client.download_file().readall().decode('utf-8')
+def read_azure_file(blob_name: str) -> str:
+    blob_client = get_blob_client(blob_name)
+    download_stream = blob_client.download_blob()
+    logger.info(f"Reading file '{blob_name}' from Azure Blob Storage.")
+    return download_stream.readall().decode('utf-8')
 
-def write_azure_file(file_name: str, content: str) -> None:
-    directory_client = get_directory_client()
-    file_client = directory_client.get_file_client(file_name)
+def write_azure_file(blob_name: str, content: str) -> None:
+    blob_client = get_blob_client(blob_name)
+    logger.info(f"Writing file '{blob_name}' to Azure Blob Storage.")
     try:
-        file_client.delete_file()
-    except:
-        pass
-    file_client.upload_file(content.encode('utf-8'))
+        blob_client.delete_blob()
+        logger.info(f"Deleted existing blob '{blob_name}'.")
+    except Exception:
+        logger.info(f"Blob '{blob_name}' does not exist, proceeding to upload.")
+        pass  # Blob may not exist
+    blob_client.upload_blob(content.encode('utf-8'), overwrite=True)
 
 def wait_for_rabbitmq(host, port, timeout=30):
     """Wait until RabbitMQ is available."""
     start_time = time.time()
     while True:
         try:
-            with socket.create_connection((host, port), timeout=2):
+            with socket.create_connection((host, int(port)), timeout=2):
                 print("RabbitMQ is up!")
                 return
         except Exception as e:
             if time.time() - start_time > timeout:
-                print("Timeout waiting for RabbitMQ!")
+                print(f"Timeout waiting for RabbitMQ! host: {host}, port: {port}")
                 raise
-            print("Waiting for RabbitMQ...")
+            print(f"Waiting for RabbitMQ... host: {host}, port: {port}")
             time.sleep(2)
 
 def fetch_agent_config(agent_id: str) -> dict:
@@ -93,7 +112,8 @@ def fetch_agent_config(agent_id: str) -> dict:
         with pymongo.MongoClient(Config.MONGODB_URI) as client:
             db = client[Config.MONGODB_DB]
             collection = db[Config.MONGODB_COLLECTION]
-            return collection.find_one({"agent_id": agent_id}) or {}
+            # Query by _id converted to ObjectId
+            return collection.find_one({"_id": ObjectId(agent_id)}) or {}
     except Exception as e:
         logger.error(f"MongoDB Error: {e}")
         return {}
@@ -120,131 +140,96 @@ def apply_mapping(data: Any, mapping_spec: Union[str, Dict]) -> Any:
         return {key: apply_mapping(data, spec) for key, spec in mapping_spec.items()}
     return None
 
-def transform_log(input_data, mapping_data):
+def transform_log(input_data, mapping_spec):
+    """
+    Transforms data with nested messages (like the Amazon conversation logs).
+    """
     output_data = {"conversations": []}
     
-    # If input_data is a dict with a list inside, extract the list.
+    # Normalize input_data to a list
     if isinstance(input_data, dict):
-        found = False
-        for key, value in input_data.items():
-            if isinstance(value, list):
-                input_data = value
-                found = True
-                break
-        if not found:
-            input_data = [input_data]
-    
+        input_data = [input_data]
+    elif not isinstance(input_data, list):
+        return output_data
+
     for conversation in input_data:
-        session_id = get_nested(conversation, mapping_data["session_id"])
-        transformed_conversation = {
-            "session_id": session_id,
-            "user_id": get_nested(conversation, mapping_data["user_id"]),
-            "messages": []
-        }
+        transformed_conv = {}
+        # Process all top-level fields in mapping except messages
+        for out_field, spec in mapping_spec.items():
+            if out_field not in ["messages", "message"]:
+                transformed_conv[out_field] = apply_mapping(conversation, spec)
         
-        messages = []
-        # Check if mapping contains 'messages'
-        if "messages" in mapping_data:
-            messages_mapping = mapping_data["messages"]
-            if isinstance(messages_mapping, list):
-                # For each path provided, get messages and store the source path.
-                for path in messages_mapping:
-                    msgs = get_nested(conversation, path)
-                    if isinstance(msgs, list):
-                        for m in msgs:
-                            m["__default_sender"] = path  # mark source for later
-                        messages.extend(msgs)
-                    elif msgs:
-                        msgs["__default_sender"] = path
-                        messages.append(msgs)
-            else:
-                messages = get_nested(conversation, messages_mapping)
-                if not isinstance(messages, list):
-                    messages = [messages]
-        # Else check for 'interaction' field mapping if no separate messages exist
-        elif "interaction" in mapping_data:
-            interaction_mapping = mapping_data["interaction"]
-            msgs = get_nested(conversation, interaction_mapping)
-            if isinstance(msgs, list):
-                messages = msgs
-            elif msgs:
-                messages = [msgs]
-        else:
-            # Fallback: assume entire conversation is a message list
-            messages = conversation.get("messages", [])
+        # Determine messages: if mapping for messages is provided, use it; otherwise use the conversation itself.
+        messages_path = mapping_spec.get("messages", "")
+        msgs = get_nested(conversation, messages_path) if messages_path else conversation
+        if not isinstance(msgs, list):
+            msgs = [msgs] if msgs is not None else []
         
-        for message in messages:
-            sender_path = mapping_data.get("message", {}).get("sender")
-            sender = None
-            if sender_path:
-                sender = get_nested(message, sender_path)
-            # If sender is not provided, use the default from the source path if available.
-            if not sender and "__default_sender" in message:
-                default = message["__default_sender"]
-                if "customer" in default.lower():
-                    sender = "customer"
-                elif "agent" in default.lower():
-                    sender = "agent"
-                else:
-                    sender = default
-            transformed_message = {
-                "sender": sender,
-                "text": get_nested(message, mapping_data["message"]["text"]),
-                "timestamp": get_nested(message, mapping_data["message"].get("timestamp", "")),
-                "ip_address": get_nested(message, mapping_data["message"].get("ip_address", "")),
-                "bot_id": get_nested(message, mapping_data["message"].get("bot_id", "")),
-                "bot_name": get_nested(message, mapping_data["message"].get("bot_name", ""))
-            }
-            transformed_conversation["messages"].append(transformed_message)
+        transformed_messages = []
+        for msg in msgs:
+            transformed_msg = apply_mapping(msg, mapping_spec["message"])
+            transformed_messages.append(transformed_msg)
         
-        output_data["conversations"].append(transformed_conversation)
+        transformed_conv["messages"] = transformed_messages
+        output_data["conversations"].append(transformed_conv)
     
     return output_data
 
-def create_interactions(conversations):
-    interactions = []
-    
-    for convo in conversations["conversations"]:
-        session_id = convo["session_id"]
-        user_id = convo["user_id"]
-        messages = convo["messages"]
-        interaction_number = 1
-        interaction_group = []
-        
-        for msg in messages:
-            interaction_group.append({"role": msg["sender"], "message": msg["text"]})
-            
-            # End the interaction when bot details are present.
-            if msg.get("bot_id") or msg.get("bot_name"):
-                interactions.append({
-                    "interaction_id": f"{session_id}_{interaction_number}",
-                    "interactions": json.dumps(interaction_group),
-                    "session_id": session_id,
-                    "timestamp": msg["timestamp"],
-                    "user_id": user_id,
-                    "ip_address": msg["ip_address"],
-                    "agent_id": msg["bot_id"] if msg["bot_id"] else None,
-                    "agent_name": msg["bot_name"] if msg["bot_name"] else None
-                })
-                interaction_group = []
-                interaction_number += 1
-        
-        # Optionally, add any leftover messages as a final interaction.
-        if interaction_group:
-            interactions.append({
-                "interaction_id": f"{session_id}_{interaction_number}",
-                "interactions": json.dumps(interaction_group),
+def group_flat_messages(input_data, mapping_spec):
+    """
+    Groups flat messages by session_id for client logs.
+    Each session becomes a conversation with a list of mapped messages.
+    """
+    sessions = {}
+    for item in input_data:
+        # First, apply the mapping to each flat message.
+        mapped_msg = apply_mapping(item, mapping_spec["message"])
+        session_id = item.get("session_id")
+        user_id = item.get("user_id")
+        if session_id not in sessions:
+            sessions[session_id] = {
                 "session_id": session_id,
-                "timestamp": messages[-1]["timestamp"],
                 "user_id": user_id,
-                "ip_address": messages[-1]["ip_address"],
-                "agent_id": None,
-                "agent_name": None
+                "messages": []
+            }
+        sessions[session_id]["messages"].append(mapped_msg)
+    return {"conversations": list(sessions.values())}
+
+def create_interactions(transformed_data):
+    """
+    Creates interactions by pairing adjacent messages (user–bot) per session.
+    """
+    interactions_output = []
+    for conv in transformed_data.get("conversations", []):
+        session_id = conv.get("session_id")
+        user_id = conv.get("user_id")
+        msgs = conv.get("messages", [])
+        # Pair messages by assuming each consecutive pair is a user–bot interaction.
+        for i in range(0, len(msgs), 2):
+            pair = msgs[i:i+2]
+            # Identify the bot message from the pair (if any)
+            bot_msg = None
+            for m in pair:
+                if m.get("sender", "").upper() == "BOT":
+                    bot_msg = m
+            # Fallback to first message if no bot message is found.
+            if not bot_msg and pair:
+                bot_msg = pair[0]
+            
+            simple_msgs = [{"role": m.get("sender"), "message": m.get("text")} for m in pair]
+            # Use bot message id if available, else generate an id
+            interaction_id = bot_msg.get("id") if bot_msg and bot_msg.get("id") else f"{session_id}_{i//2+1}"
+            interactions_output.append({
+                "interaction_id": interaction_id,
+                "interactions": json.dumps(simple_msgs),
+                "session_id": session_id,
+                "timestamp": bot_msg.get("timestamp") if bot_msg else None,
+                "user_id": user_id,
+                "ip_address": bot_msg.get("ip_address") if bot_msg else None,
+                "agent_id": bot_msg.get("bot_id") if bot_msg else None,
+                "agent_name": bot_msg.get("bot_name") if bot_msg else None
             })
-    
-    return interactions
-
-
+    return interactions_output
 
 def schedule_agent_processing(agent_id: str):
     agent_config = fetch_agent_config(agent_id)
@@ -265,7 +250,7 @@ def schedule_agent_processing(agent_id: str):
         start_time = schedule_config.get('start_time', '00:00')
 
         if schedule_type == 'minutely':
-            scheduler.add_job(
+            job = scheduler.add_job(
                 process_data,
                 'interval',
                 minutes=1,
@@ -273,7 +258,7 @@ def schedule_agent_processing(agent_id: str):
                 id=job_id
             )
         elif schedule_type == 'hourly':
-            scheduler.add_job(
+            job = scheduler.add_job(
                 process_data,
                 'interval',
                 hours=1,
@@ -282,7 +267,7 @@ def schedule_agent_processing(agent_id: str):
             )
         elif schedule_type == 'daily':
             hour, minute = map(int, start_time.split(':'))
-            scheduler.add_job(
+            job = scheduler.add_job(
                 process_data,
                 'cron',
                 hour=hour,
@@ -291,7 +276,7 @@ def schedule_agent_processing(agent_id: str):
                 id=job_id
             )
         elif schedule_type == 'weekly':
-            scheduler.add_job(
+            job = scheduler.add_job(
                 process_data,
                 'interval',
                 weeks=1,
@@ -299,7 +284,7 @@ def schedule_agent_processing(agent_id: str):
                 id=job_id
             )
         elif schedule_type.endswith('h'):
-            scheduler.add_job(
+            job = scheduler.add_job(
                 process_data,
                 'interval',
                 hours=int(schedule_type[:-1]),
@@ -311,6 +296,7 @@ def schedule_agent_processing(agent_id: str):
             return
 
         logger.info(f"Scheduled {schedule_type} processing for {agent_id}")
+        logger.debug(f"Next run time for agent {agent_id}: {job.next_run_time}")
         process_data(agent_id)  # Immediate first run
 
     except Exception as e:
@@ -319,14 +305,16 @@ def schedule_agent_processing(agent_id: str):
 def process_data(agent_id: str):
     logger.info(f"Starting data processing for {agent_id}")
     
+    # Fetch agent config in case it's needed further
     agent_config = fetch_agent_config(agent_id)
     if not agent_config:
         logger.error(f"Configuration not found for {agent_id}")
         return
 
-    log_path = agent_config.get('log_path')
-    map_path = agent_config.get('map_path')
-    output_file = agent_config.get('output_file', 'amazon_interactions.json')
+    # For the new schema, hard-code these values
+    log_path = "amazonq_conversations.json"
+    map_path = "amazonq_json_mapping.json"
+    output_file = "amazon_interactions.json"
 
     try:
         # Read and parse files
@@ -343,42 +331,52 @@ def process_data(agent_id: str):
         mapping_data = json.loads(mapping_content)
 
         # Process data
-        transformed = transform_log(log_data, mapping_data)
-        interactions = create_interactions(transformed)
+        if isinstance(log_data, list) and log_data and "role" in log_data[0]:
+            transformed_data = group_flat_messages(log_data, mapping_data)
+        else:
+            transformed_data = transform_log(log_data, mapping_data)
+
+        interactions = create_interactions(transformed_data)
 
         # Write output
         write_azure_file(output_file, json.dumps(interactions))
 
-        # Redis integration
+        # Redis integration with agent-specific keys
         redis_client = redis.Redis(host='redis', port=6379, db=0)
+        agent_queue_key = f"interactions_queue:{agent_id}"
         for interaction in interactions:
-            redis_client.lpush("interactions_queue", json.dumps(interaction))
+            redis_client.lpush(agent_queue_key, json.dumps(interaction))
 
         # RabbitMQ notification
         try:
             credentials = pika.PlainCredentials(Config.RABBITMQ_USER, Config.RABBITMQ_PASS)
             parameters = pika.ConnectionParameters(
                 host=Config.RABBITMQ_HOST,
-                credentials=credentials
+                credentials=credentials,
+                heartbeat=60
             )
-            connection = pika.BlockingConnection(parameters)        
+            connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
-
-            channel.queue_declare(queue='message_queue', durable=True)
+            message_body = json.dumps({'agent_id': agent_id})
+            logger.debug(f"Attempting to send message: {message_body}")
             channel.basic_publish(
                 exchange='',
                 routing_key='message_queue',
-                body='Interactions ready',
+                body=message_body,
                 properties=pika.BasicProperties(
                     delivery_mode=2,
                     expiration='600000'
                 )
             )
-            connection.close()
             logger.info(f"✅ Sent ready message for {agent_id}")
         except Exception as e:
             logger.error(f"❌ Failed to send ready message: {e}")
-
+        finally:
+            try:
+                connection.close()
+            except Exception as close_err:
+                logger.error(f"❌ Error closing connection: {close_err}")
+         
         logger.info(f"Processed {len(interactions)} interactions for {agent_id}")
 
     except Exception as e:
@@ -395,22 +393,24 @@ def listen_for_agent_events():
         try:
             connection = pika.BlockingConnection(parameters)
             channel = connection.channel()
-            channel.queue_declare(queue='agent_events', durable=True)
-            channel.queue_declare(queue='processor_queue', durable=True)
+
             def callback(ch, method, properties, body):
                 try:
                     event = json.loads(body)
+                    # Now, check the "message" field instead of "action"
+                    event_message = event.get('message')
                     agent_id = event.get('agent_id')
-                    action = event.get('action')
                     
-                    if action in ['create', 'update']:
-                        logger.info(f"Processing {action} for {agent_id}")
+                    if event_message == 'AgentCreated':
+                        logger.info(f"Processing AgentCreated for {agent_id}")
                         schedule_agent_processing(agent_id)
-                    elif action == 'delete':
+                    elif event_message == 'delete':
                         job_id = f"agent_{agent_id}"
                         if scheduler.get_job(job_id):
                             scheduler.remove_job(job_id)
                             logger.info(f"Removed job for {agent_id}")
+                    else:
+                        logger.info(f"Ignoring event with message: {event_message}")
 
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
@@ -428,7 +428,7 @@ def listen_for_agent_events():
             time.sleep(5)
 
 def main():
-    wait_for_rabbitmq("rabbitmq", 5672)
+    wait_for_rabbitmq(Config.RABBITMQ_HOST, Config.RABBITMQ_PORT)
     logger.info("Starting multi-tenant preprocessor service")
     
     # Start scheduler
